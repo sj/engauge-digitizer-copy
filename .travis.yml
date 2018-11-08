@@ -1,0 +1,69 @@
+dist: trusty
+
+language: cpp
+
+matrix:
+  include:
+    - os: linux
+    - os: linux
+      env: BUILD_DEBUG="1"
+    - os: osx
+      env: ARCH="x86_64"
+      compiler: "clang"
+    - os: osx
+      env: ARCH="x86_64" BUILD_DEBUG="1"
+      compiler: "clang"
+     
+before_script:
+ - if [ `uname` = "Linux" ]; then
+     export DISPLAY=:99.0;
+     sh -e /etc/init.d/xvfb start;
+     sleep 3;
+   fi
+
+before_install:
+ - if [ `uname` = "Linux" ]; then
+     sudo apt-get update -qq;
+     sudo apt-get install --yes --no-install-recommends qtbase5-dev qttools5-dev qt5-default qttools5-dev-tools qt5-qmake liblog4cpp5-dev libfftw3-dev libqt5sql5-sqlite xvfb;
+   elif [ `uname` = "Darwin" ]; then
+     brew update;
+     brew info qt;
+     brew install fftw log4cpp qt;
+     export QT5BREWHOME="/usr/local/opt/qt";
+   fi
+
+script:
+ - if [ `uname` = "Darwin" ]; then
+    export CPPFLAGS="-I$QT5BREWHOME/include";
+    export LDFLAGS="-L$QT5BREWHOME/lib";
+    export PATH=$QT5BREWHOME/bin:$PATH;
+    export FFTW_HOME=`brew --prefix homebrew/core/fftw`;
+    export LOG4CPP_HOME=`brew --prefix homebrew/core/log4cpp`;
+   fi
+ - if [ "$BUILD_DEBUG" = "1" ]; then
+    export BUILD_FLAGS="CONFIG+=debug";
+   fi
+ - qmake $BUILD_FLAGS engauge.pro
+#hacks
+ - if [ `uname` = "Darwin" ]; then
+    sed -ibak '/^LIBS/s/-lQt5/-framework Qt/g' Makefile;
+    sed -ibak2 's|-L/usr/local/Cellar|-F/usr/local/Cellar|g' Makefile;
+    sed -ibak3 's|-F/usr/local/Cellar/log4cpp|-L/usr/local/Cellar/log4cpp|g' Makefile;
+   fi
+ - make
+ - cd help && ./build.bash && cd ..;
+ - if [ `uname` = "Darwin" -a "$BUILD_DEBUG" = "1" ]; then
+    cp $FFTW_HOME/lib/lib* src;
+    cp $LOG4CPP_HOME/lib/lib* src;
+   fi
+#no gui tests on OSX for release version
+ - if [ `uname` != "Darwin" -o "$BUILD_DEBUG" = "1" ]; then
+    cd src && ./build_and_run_all_gui_tests && cd ..;
+   fi
+#no cli tests on OSX
+ - if [ `uname` = "Linux" ]; then
+    cd src && ./build_and_run_all_cli_tests && cd ..;
+   fi
+ 
+after_success:
+ - file bin/engauge*
